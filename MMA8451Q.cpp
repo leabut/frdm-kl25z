@@ -20,6 +20,7 @@
 
 #define REG_WHO_AM_I      0x0D
 #define REG_CTRL_REG_1    0x2A
+#define REG_XYZ_DATA_CFG  0x0E
 #define REG_OUT_X_MSB     0x01
 #define REG_OUT_Y_MSB     0x03
 #define REG_OUT_Z_MSB     0x05
@@ -27,8 +28,21 @@
 #define UINT14_MAX        16383
 
 MMA8451Q::MMA8451Q(PinName sda, PinName scl, int addr) : m_i2c(sda, scl), m_addr(addr) {
+    uint8_t data[2] = {0u,0u};
+
+    // clear active bit in peripheral
+    data[0] = REG_CTRL_REG_1;
+    data[1] = 0x00;
+    writeRegs(data, 2);
+
+    // configure for +-8g data
+    data[0] = REG_XYZ_DATA_CFG;
+    data[1] = 0x02;
+    writeRegs(data, 2);
+    
     // activate the peripheral
-    uint8_t data[2] = {REG_CTRL_REG_1, 0x01};
+    data[0] = REG_CTRL_REG_1;
+    data[1] = 0x01;
     writeRegs(data, 2);
 }
 
@@ -41,15 +55,15 @@ uint8_t MMA8451Q::getWhoAmI() {
 }
 
 float MMA8451Q::getAccX() {
-    return (float(getAccAxis(REG_OUT_X_MSB))/4096.0);
+    return (float(getAccAxis(REG_OUT_X_MSB))/1024.0);
 }
 
 float MMA8451Q::getAccY() {
-    return (float(getAccAxis(REG_OUT_Y_MSB))/4096.0);
+    return (float(getAccAxis(REG_OUT_Y_MSB))/1024.0);
 }
 
 float MMA8451Q::getAccZ() {
-    return (float(getAccAxis(REG_OUT_Z_MSB))/4096.0);
+    return (float(getAccAxis(REG_OUT_Z_MSB))/1024.0);
 }
 
 void MMA8451Q::getAccAllAxis(float * res) {
