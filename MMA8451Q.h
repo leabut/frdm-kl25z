@@ -21,6 +21,9 @@
 
 #include "mbed.h"
 
+class MMA8451Q;
+extern MMA8451Q mma8451q;
+
 /**
 * MMA8451Q accelerometer example
 *

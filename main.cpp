@@ -6,94 +6,60 @@
 #include "mbed.h"
 #include "MMA8451Q.h"
 
-PinName ACC_SDA = PTE25;
-PinName ACC_SCL = PTE24;
+#include "main.h"
+#include "Visualizer.h"
 
-#define MMA8451_I2C_ADDRESS (0x1d<<1)
+// configurable values
+#define CONTROL_RATE 50ms
 
-#define SLEEP_RATE 50ms
+double Kp = 0.50;
+double ServoXOffset = 0.0;
+double ServoYOffset = 0.0;
+
+#define SERVO_PWM_LENGTH 0.020f   // 20ms pwm base frequency
+#define SERVO_MAX_POS    0.00195f // 1.95ms duty cycle (171 degrees)
+#define SERVO_MID_POS    0.0015f  // 1.95ms duty cycle (9 degrees)
+#define SERVO_MIN_POS    0.0015f  // 1.5ms duty cycle (90 degrees)
 
 #define RAD_TO_DEG (360.0f/(2*3.141f))
 
-MMA8451Q acc(ACC_SDA, ACC_SCL, MMA8451_I2C_ADDRESS);
-PwmOut rled(LED1);
-PwmOut gled(LED2);
-PwmOut bled(LED3);
+// hardware multiplexer settings
 PwmOut servoX(PTB0);
 PwmOut servoY(PTB1);
 
-// specify period first
-float pwmLength = 0.020f; // 20ms
-
 float AccX = 0.0f, AccY = 0.0f, AccZ = 0.0f;
-double dt = 0.0, currentTime = 0.0, previousTime = 0.0;
-double pitch = 0.0, yaw = 0.0;
-double errorX = 0.0, errorY = 0.0;
-double pidX_p = 0.0, pidY_p = 0.0;
-double PIDX = 0.0, PIDY = 0.0;
-double servoXDeg = 0.0, servoYDeg = 0.0;
-
+double Pitch = 0.0, Yaw = 0.0;
+double ServoXDeg = 0.0, ServoYDeg = 0.0;
 double AngleXZAxis = 0.0, AngleYZAxis = 0.0;
 
-double kp = 0.50;
-double kd = 0.0;
-double ki = 0.0;
-
-double desired_angleX = 0.0, desired_angleY = 0.0;
-double servoX_offset = 0.0;
-double servoY_offset = 0.0;
-
-void getAccData();
-void visualizeAcc();
-void printfAcc();
-void accel_degrees();
-void pidcompute();
-void updateServoPos();
-void getConstructionAngles();
-void correctAccData();
-
-double angleVecToVec(double vec1[3], double vec2[3]);
-void rotateXAxis(double vec[3], double alpha);
-void rotateYAxis(double vec[3], double alpha);
-void rotateZAxis(double vec[3], double alpha);
-
 int main() {
-    servoX.period(pwmLength);
-    servoX.pulsewidth(0.0015f);
-    servoY.period(pwmLength);
-    servoY.pulsewidth(0.0015f);
+    servoX.period(SERVO_PWM_LENGTH);
+    servoX.pulsewidth(SERVO_MID_POS);
+    servoY.period(SERVO_PWM_LENGTH);
+    servoY.pulsewidth(SERVO_MID_POS);
 
-    rled = 1.0f;
-    bled = 1.0f;
-    for(auto i = 0u; i < 10u; i++) {
-      if(i % 2u == 0u) {
-        gled = 0.0f;
-      } else {
-        gled = 1.0f;
-      }
-      ThisThread::sleep_for(50ms);
-    }
+    visualizer::startupBlink();
 
     getAccData();
     getConstructionAngles();
 
     while (true) {
-        previousTime = currentTime;
-        //currentTime = us_ticker_read() / 1000L;
-        dt = (currentTime - previousTime) / 1000;
-
         getAccData();
-        visualizeAcc();
-        //printfAcc();
+        float data[3] = {AccX, AccY, AccZ};
+        visualizer::visualizeAcc(data);
 
-        correctAccData();
-        printfAcc();
+        transformAccData();
+
+        data[0] = AccX;
+        data[1] = AccY;
+        data[2] = AccZ;
+        visualizer::printfAcc(data);
 
         accel_degrees();
-        pidcompute();
-        updateServoPos();
+        callPidController();
+        updateServoPos(ServoXDeg, ServoYDeg);
 
-        ThisThread::sleep_for(SLEEP_RATE);
+        ThisThread::sleep_for(CONTROL_RATE);
     }
 }
 
@@ -104,7 +70,7 @@ void getConstructionAngles() {
   AngleYZAxis = atan(-vec[0]/vec[2]);
 }
 
-void correctAccData() {
+void transformAccData() {
   double vec[3] = {AccX, AccY, AccZ};
   rotateXAxis(vec, AngleXZAxis);
   rotateYAxis(vec, AngleYZAxis);
@@ -114,87 +80,45 @@ void correctAccData() {
 }
 
 void getAccData() {
-    AccX = acc.getAccX();
-    AccY = acc.getAccY();
-    AccZ = acc.getAccZ();
-}
-
-void printfAcc() {
-    int x = AccX * 1000u;
-    int y = AccY * 1000u;
-    int z = AccZ * 1000u;
-    printf("X: %d, Y: %d, Z: %d\n", x, y, z);
-}
-
-void visualizeAcc() {
-    rled = 1.0f - AccX;
-    gled = 1.0f - AccY;
-    bled = 1.0f - AccZ;
+    AccX = mma8451q.getAccX();
+    AccY = mma8451q.getAccY();
+    AccZ = mma8451q.getAccZ();
 }
 
 void accel_degrees () {
 #ifdef RESTRICT_PITCH // Eq. 25 and 26
-  yaw   = atan2(AccY, AccZ) * RAD_TO_DEG;
-  pitch = atan(-AccX / sqrt(AccY * AccY + AccZ * AccZ)) * RAD_TO_DEG;
+  Yaw   = atan2(AccY, AccZ) * RAD_TO_DEG;
+  Pitch = atan(-AccX / sqrt(AccY * AccY + AccZ * AccZ)) * RAD_TO_DEG;
 #else // Eq. 28 and 29
-  yaw   = atan(AccY / sqrt(AccX * AccX + AccZ * AccZ)) * RAD_TO_DEG;
-  pitch = atan2(-AccX, AccZ) * RAD_TO_DEG;
+  Yaw   = atan(AccY / sqrt(AccX * AccX + AccZ * AccZ)) * RAD_TO_DEG;
+  Pitch = atan2(-AccX, AccZ) * RAD_TO_DEG;
 #endif
 }
 
-void pidcompute() {
-    auto previous_errorX = errorX;
-    auto previous_errorY = errorY;
-
-    errorX = pitch - desired_angleX;
-    errorY = yaw - desired_angleY;
-
-    //Defining "P"
-    pidX_p = kp*errorX;
-    pidY_p = kp*errorY;
-
-    //Defining "D"
-    /*
-    pidX_d = kd*((errorX - previous_errorX)/dt);
-    pidY_d = kd*((errorY - previous_errorY)/dt);
-
-    //Defining "I"
-    pidX_i = ki * (pidX_i + errorX * dt);
-    pidY_i = ki * (pidY_i + errorY * dt);
-    */
-
-    PIDX = pidX_p; // + pidX_i + pidX_d;
-    PIDY = pidY_p; // + pidY_i + pidY_d;
-
-    servoXDeg = 90 + PIDX;
-    servoYDeg = 90 + PIDY;
-
-    int a = servoXDeg * 10;
-    int b = servoYDeg * 10;
-
-    //printf("servoXDeg: %d - ", a);
-    //printf("servoYDeg: %d\n", b);
+void callPidController() {
+    ServoXDeg = 90 + Kp*Pitch + ServoXOffset;
+    ServoYDeg = 90 + Kp*Yaw + ServoYOffset;
 }
 
-void updateServoPos() {
-    auto servoXPwm = 0.015f;
-    auto servoYPwm = 0.015f;
+void updateServoPos(double servoXAngle, double servoYAngle) {
+    auto servoXPwm = SERVO_MID_POS;
+    auto servoYPwm = SERVO_MID_POS;
 
-    servoXPwm = (servoXDeg / 180.0f) * 0.001f + 0.001f;
-    servoYPwm = (servoYDeg / 180.0f) * 0.001f + 0.001f;
+    servoXPwm = (servoXAngle / 180.0f) * 0.001f + 0.001f;
+    servoYPwm = (servoYAngle / 180.0f) * 0.001f + 0.001f;
 
-    if(servoXDeg >= 175.0) {
-        servoXPwm = 0.00195f;
+    if(servoXAngle >= 172.0) {
+        servoXPwm = SERVO_MAX_POS;
     }
-    if(servoXDeg <= 5.0) {
-        servoXPwm = 0.00105f;
+    if(servoXAngle <= 10.0) {
+        servoXPwm = SERVO_MIN_POS;
     }
 
-    if(servoYDeg >= 175.0) {
-        servoYPwm = 0.00195f;
+    if(servoYAngle >= 172.0) {
+        servoYPwm = SERVO_MAX_POS;
     }
-    if(servoYDeg <= 5.0) {
-        servoYPwm = 0.00105f;
+    if(servoYAngle <= 10.0) {
+        servoYPwm = SERVO_MIN_POS;
     }
 
     servoX.pulsewidth(servoXPwm);

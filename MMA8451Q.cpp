@@ -27,6 +27,10 @@
 
 #define UINT14_MAX        16383
 
+#define MMA8451_I2C_ADDRESS (0x1d<<1)
+
+MMA8451Q mma8451q(PTE25, PTE24, MMA8451_I2C_ADDRESS);
+
 MMA8451Q::MMA8451Q(PinName sda, PinName scl, int addr) : m_i2c(sda, scl), m_addr(addr) {
     uint8_t data[2] = {0u,0u};
 
