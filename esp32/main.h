@@ -13,7 +13,7 @@ void visualizeAcc();
 void printfAcc();
 void accel_degrees();
 void callPidController();
-void updateServoPos(double servoXAngle, double servoYAngle);
+void updateServoPos();
 void getConstructionAngles();
 void transformAccData();
 

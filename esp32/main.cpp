@@ -4,8 +4,8 @@
  *  Created on: 05.09.2020
  *      Author: spk
  */
-#include <cstring>
 #include <cmath>
+#include <cstring>
 
 #include "esp_log.h"
 #include "sdkconfig.h"
@@ -30,13 +30,18 @@ double Pitch = 0.0, Yaw = 0.0;
 double ServoXDeg = 0.0, ServoYDeg = 0.0;
 double AngleXZAxis = 0.0, AngleYZAxis = 0.0;
 
-MPU6050 mpu6050{MPU6050_DEFAULT_ADDRESS};
-Servo servo{18};
+MPU6050* mpu6050 = nullptr;
+Servo* servo = nullptr;
 
 SemaphoreHandle_t print_mux = NULL;
 
 static void main_task(void* arg) {
   uint32_t task_idx = (uint32_t)arg;
+
+  static MPU6050 _mpu6050{MPU6050_DEFAULT_ADDRESS};
+  mpu6050 = &_mpu6050;
+  static Servo _servo{18};
+  servo = &_servo;
 
   getAccData();
   getConstructionAngles();
@@ -48,7 +53,7 @@ static void main_task(void* arg) {
 
     accel_degrees();
     callPidController();
-    //updateServoPos();
+    updateServoPos();
 
     xSemaphoreTake(print_mux, portMAX_DELAY);
     printf("*******************\n");
@@ -90,19 +95,14 @@ void transformAccData() {
 }
 
 void getAccData() {
-  AccX = (mpu6050.getAccelerationX() * 1000.0f) / 2048.0f;
-  AccY = (mpu6050.getAccelerationY() * 1000.0f) / 2048.0f;
-  AccZ = (mpu6050.getAccelerationZ() * 1000.0f) / 2048.0f;
+  AccX = (mpu6050->getAccelerationX() * 1000.0f) / 2048.0f;
+  AccY = (mpu6050->getAccelerationY() * 1000.0f) / 2048.0f;
+  AccZ = (mpu6050->getAccelerationZ() * 1000.0f) / 2048.0f;
 }
 
 void accel_degrees() {
-#ifdef RESTRICT_PITCH  // Eq. 25 and 26
-  Yaw = atan2(AccY, AccZ) * RAD_TO_DEG;
-  Pitch = atan(-AccX / sqrt(AccY * AccY + AccZ * AccZ)) * RAD_TO_DEG;
-#else  // Eq. 28 and 29
   Yaw = atan(AccY / sqrt(AccX * AccX + AccZ * AccZ)) * RAD_TO_DEG;
-  Pitch = atan2(-AccX, AccZ) * RAD_TO_DEG;
-#endif
+  Pitch = atan(-AccX / sqrt(AccY * AccY + AccZ * AccZ)) * RAD_TO_DEG;
 }
 
 void callPidController() {
@@ -111,34 +111,24 @@ void callPidController() {
 }
 
 void updateServoPos() {
-  static int angle = 0;
-  servo.setAngle(angle);
-  if (angle >= 180) {
-    angle = 0;
-  } else {
-    angle += 20;
+  uint32_t servoXAngleInt = ServoXDeg;
+  __attribute__((unused)) uint32_t servoYAngleInt = ServoYDeg;
+
+  if (ServoXDeg >= 110.0) {
+    servoXAngleInt = 110;
+  }
+  if (ServoXDeg <= 40.0) {
+    servoXAngleInt = 40;
   }
 
-  /*
-  uint8_t servoXAngleInt = ServoXDeg;
-  __attribute__((unused)) uint8_t servoYAngleInt = ServoYDeg;
-
-  if (ServoXDeg >= 172.0) {
-    servoXAngleInt = 172;
+  if (ServoYDeg >= 110.0) {
+    servoYAngleInt = 110;
   }
-  if (ServoXDeg <= 10.0) {
-    servoXAngleInt = 10;
+  if (ServoYDeg <= 40.0) {
+    servoYAngleInt = 40;
   }
 
-  if (ServoYDeg >= 172.0) {
-    servoYAngleInt = 172;
-  }
-  if (ServoYDeg <= 10.0) {
-    servoYAngleInt = 10;
-  }
-
-  servo.setAngle(servoXAngleInt);
-  */
+  servo->setAngle(servoXAngleInt);
 }
 
 void rotateXAxis(double vec[3], double alpha) {
