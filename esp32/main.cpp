@@ -13,6 +13,7 @@
 #include <I2Cdev.h>
 #include <MPU6050.h>
 #include <Servo.h>
+#include <Servo2.h>
 
 // configurable values
 #define CONTROL_RATE 50
@@ -31,7 +32,8 @@ double ServoXDeg = 0.0, ServoYDeg = 0.0;
 double AngleXZAxis = 0.0, AngleYZAxis = 0.0;
 
 MPU6050* mpu6050 = nullptr;
-Servo* servo = nullptr;
+Servo* servoX = nullptr;
+Servo2* servoY = nullptr;
 
 SemaphoreHandle_t print_mux = NULL;
 
@@ -40,8 +42,10 @@ static void main_task(void* arg) {
 
   static MPU6050 _mpu6050{MPU6050_DEFAULT_ADDRESS};
   mpu6050 = &_mpu6050;
-  static Servo _servo{18};
-  servo = &_servo;
+  static Servo _servoX{18};
+  servoX = &_servoX;
+  static Servo2 _servoY{19};
+  servoY = &_servoY;
 
   getAccData();
   getConstructionAngles();
@@ -55,7 +59,6 @@ static void main_task(void* arg) {
     callPidController();
     updateServoPos();
 
-    xSemaphoreTake(print_mux, portMAX_DELAY);
     printf("*******************\n");
     printf("TASK[%d]  MASTER READ SENSOR( MPU6050 )\n", task_idx);
     printf("*******************\n");
@@ -63,10 +66,8 @@ static void main_task(void* arg) {
     int accY = AccY;
     int accZ = AccZ;
     printf("accX: %d - accY: %d - accZ: %d\n", accX, accY, accZ);
-    xSemaphoreGive(print_mux);
     vTaskDelay(CONTROL_RATE / portTICK_RATE_MS);
   }
-  vSemaphoreDelete(print_mux);
   vTaskDelete(NULL);
 }
 
@@ -128,7 +129,8 @@ void updateServoPos() {
     servoYAngleInt = 40;
   }
 
-  servo->setAngle(servoXAngleInt);
+  servoX->setAngle(servoXAngleInt);
+  servoY->setAngle(servoYAngleInt);
 }
 
 void rotateXAxis(double vec[3], double alpha) {
