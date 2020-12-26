@@ -30,12 +30,17 @@ double Pitch = 0.0, Yaw = 0.0;
 double ServoXDeg = 0.0, ServoYDeg = 0.0;
 double AngleXZAxis = 0.0, AngleYZAxis = 0.0;
 
-MPU6050 mpu6050{MPU6050_DEFAULT_ADDRESS};
-Servo servo{18};
+MPU6050* mpu6050 = nullptr; //{MPU6050_DEFAULT_ADDRESS};
+Servo* servo = nullptr; //{18};
 
 SemaphoreHandle_t print_mux = NULL;
 
 static void main_task(void* arg) {
+	static MPU6050 _mpu6050{MPU6050_DEFAULT_ADDRESS};
+	mpu6050 = &_mpu6050;
+	static Servo _servo{18};
+	servo = &_servo;
+
   uint32_t task_idx = (uint32_t)arg;
 
   getAccData();
@@ -90,9 +95,9 @@ void transformAccData() {
 }
 
 void getAccData() {
-  AccX = (mpu6050.getAccelerationX() * 1000.0f) / 2048.0f;
-  AccY = (mpu6050.getAccelerationY() * 1000.0f) / 2048.0f;
-  AccZ = (mpu6050.getAccelerationZ() * 1000.0f) / 2048.0f;
+  AccX = (mpu6050->getAccelerationX() * 1000.0f) / 2048.0f;
+  AccY = (mpu6050->getAccelerationY() * 1000.0f) / 2048.0f;
+  AccZ = (mpu6050->getAccelerationZ() * 1000.0f) / 2048.0f;
 }
 
 void accel_degrees() {
@@ -112,7 +117,7 @@ void callPidController() {
 
 void updateServoPos() {
   static int angle = 0;
-  servo.setAngle(angle);
+  servo->setAngle(angle);
   if (angle >= 180) {
     angle = 0;
   } else {
