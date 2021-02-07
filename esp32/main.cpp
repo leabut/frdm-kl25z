@@ -18,9 +18,14 @@
 // configurable values
 #define CONTROL_RATE 50
 
-double Kp = 0.50;
-double ServoXOffset = 0.0;
-double ServoYOffset = 0.0;
+double Kp = 2.2;
+double ServoXOffset = 19.0;
+double ServoYOffset = 15.0;
+
+double ServoXMinAngle = 60.0;
+double ServoXMaxAngle = 120.0;
+double ServoYMinAngle = 60.0;
+double ServoYMaxAngle = 120.0;
 
 #include "main.h"
 
@@ -28,7 +33,7 @@ double ServoYOffset = 0.0;
 
 float AccX = 0.0f, AccY = 0.0f, AccZ = 0.0f;
 double Pitch = 0.0, Yaw = 0.0;
-double ServoXDeg = 0.0, ServoYDeg = 0.0;
+double ServoXDeg = 90.0, ServoYDeg = 90.0;
 double AngleXZAxis = 0.0, AngleYZAxis = 0.0;
 
 MPU6050* mpu6050 = nullptr;
@@ -38,10 +43,10 @@ Servo2* servoY = nullptr;
 SemaphoreHandle_t print_mux = NULL;
 
 static void main_task(void* arg) {
-  uint32_t task_idx = (uint32_t)arg;
 
   static MPU6050 _mpu6050{MPU6050_DEFAULT_ADDRESS};
   mpu6050 = &_mpu6050;
+
   static Servo _servoX{18};
   servoX = &_servoX;
   static Servo2 _servoY{19};
@@ -59,14 +64,11 @@ static void main_task(void* arg) {
     callPidController();
     updateServoPos();
 
-    printf("*******************\n");
-    printf("TASK[%d]  MASTER READ SENSOR( MPU6050 )\n", task_idx);
-    printf("*******************\n");
     int accX = AccX;
     int accY = AccY;
     int accZ = AccZ;
-    printf("accX: %d - accY: %d - accZ: %d\n", accX, accY, accZ);
-    vTaskDelay(CONTROL_RATE / portTICK_RATE_MS);
+    printf("%d,%d,%d\n", accX, accY, accZ);
+    //vTaskDelay(CONTROL_RATE / portTICK_RATE_MS);
   }
   vTaskDelete(NULL);
 }
@@ -104,33 +106,57 @@ void getAccData() {
 void accel_degrees() {
   Yaw = atan(AccY / sqrt(AccX * AccX + AccZ * AccZ)) * RAD_TO_DEG;
   Pitch = atan(-AccX / sqrt(AccY * AccY + AccZ * AccZ)) * RAD_TO_DEG;
+  Pitch *= -1;
 }
 
 void callPidController() {
-  ServoXDeg = 90 + Kp * Pitch + ServoXOffset;
-  ServoYDeg = 90 + Kp * Yaw + ServoYOffset;
+  ServoXDeg = (90 + Kp * Pitch + ServoXOffset) * 0.5 + ServoXDeg * 0.5;
+  ServoYDeg = (90 + Kp * Yaw + ServoYOffset) * 0.5 + ServoYDeg * 0.5;
 }
 
 void updateServoPos() {
   uint32_t servoXAngleInt = ServoXDeg;
-  __attribute__((unused)) uint32_t servoYAngleInt = ServoYDeg;
+  uint32_t servoYAngleInt = ServoYDeg;
 
-  if (ServoXDeg >= 110.0) {
-    servoXAngleInt = 110;
+  auto upperLimitX = ServoXMaxAngle + ServoXOffset;
+  auto lowerLimitX = ServoXMinAngle + ServoXOffset;
+  auto upperLimitY = ServoYMaxAngle + ServoYOffset;
+  auto lowerLimitY = ServoYMinAngle + ServoYOffset;
+
+  if(upperLimitX >= 180.0) {
+	  upperLimitX = 180.0;
   }
-  if (ServoXDeg <= 40.0) {
-    servoXAngleInt = 40;
+  if(lowerLimitX <= 0.0) {
+	  lowerLimitX = 0.0;
+  }
+  if(upperLimitY >= 180.0) {
+	  upperLimitY = 180.0;
+  }
+  if(lowerLimitY <= 0.0) {
+	  lowerLimitY = 0.0;
   }
 
-  if (ServoYDeg >= 110.0) {
-    servoYAngleInt = 110;
+  if (ServoXDeg >= upperLimitX) {
+    servoXAngleInt = upperLimitX;
   }
-  if (ServoYDeg <= 40.0) {
-    servoYAngleInt = 40;
+  if (ServoXDeg <= lowerLimitX) {
+    servoXAngleInt = lowerLimitX;
+  }
+
+  if (ServoYDeg >= upperLimitY) {
+    servoYAngleInt = upperLimitY;
+  }
+  if (ServoYDeg <= lowerLimitY) {
+    servoYAngleInt = lowerLimitY;
   }
 
   servoX->setAngle(servoXAngleInt);
   servoY->setAngle(servoYAngleInt);
+
+  servoXAngleInt -= ServoXOffset;
+  servoYAngleInt -= ServoYOffset;
+
+  printf("servoXAngleInt: %d servoYAngleInt: %d\n", servoXAngleInt, servoYAngleInt);
 }
 
 void rotateXAxis(double vec[3], double alpha) {
