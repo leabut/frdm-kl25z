@@ -19,11 +19,11 @@
 #define CONTROL_RATE 50
 
 double Kp = 2.2;
-double ServoXOffset = 19.0;
-double ServoYOffset = 15.0;
+double ServoXOffset = 15.0;
+double ServoYOffset = 16.0;
 
-double ServoXMinAngle = 60.0;
-double ServoXMaxAngle = 120.0;
+double ServoXMinAngle = 50.0;
+double ServoXMaxAngle = 130.0;
 double ServoYMinAngle = 60.0;
 double ServoYMaxAngle = 120.0;
 
@@ -110,8 +110,8 @@ void accel_degrees() {
 }
 
 void callPidController() {
-  ServoXDeg = (90 + Kp * Pitch + ServoXOffset) * 0.5 + ServoXDeg * 0.5;
-  ServoYDeg = (90 + Kp * Yaw + ServoYOffset) * 0.5 + ServoYDeg * 0.5;
+  ServoXDeg = (90 + Kp * Pitch + ServoXOffset) * 0.05 + ServoXDeg * 0.95;
+  ServoYDeg = (90 + Kp * Yaw + ServoYOffset) * 0.05 + ServoYDeg * 0.95;
 }
 
 void updateServoPos() {
