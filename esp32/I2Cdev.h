@@ -19,6 +19,7 @@
  * --------|--------------------------|----------------------|--------------------|------|
  *
  */
+esp_err_t i2c_read_robust(uint8_t deviceAddress, uint8_t* data, size_t size);
 esp_err_t i2c_read(uint8_t deviceAddress, uint8_t* data, size_t size);
 
 /**

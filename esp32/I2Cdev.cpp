@@ -24,7 +24,7 @@
 #define ACK_VAL 0x0                /*!< I2C ack value */
 #define NACK_VAL 0x1               /*!< I2C nack value */
 
-esp_err_t i2c_read(uint8_t deviceAddress, uint8_t* data, size_t size) {
+esp_err_t i2c_read_robust(uint8_t deviceAddress, uint8_t* data, size_t size) {
   if (size == 0) {
     return ESP_OK;
   }
@@ -40,6 +40,33 @@ esp_err_t i2c_read(uint8_t deviceAddress, uint8_t* data, size_t size) {
     return ret;
   }
   vTaskDelay(30 / portTICK_RATE_MS);
+  cmd = i2c_cmd_link_create();
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, deviceAddress << 1 | READ_BIT, ACK_CHECK_EN);
+  i2c_master_read_byte(cmd, data, static_cast<i2c_ack_type_t>(NACK_VAL));
+  //i2c_master_read_byte(cmd, data_l, NACK_VAL);
+  i2c_master_stop(cmd);
+  ret = i2c_master_cmd_begin(0 /* i2c_num */, cmd, 1000 / portTICK_RATE_MS);
+  i2c_cmd_link_delete(cmd);
+  return ret;
+}
+
+esp_err_t i2c_read(uint8_t deviceAddress, uint8_t* data, size_t size) {
+  if (size == 0) {
+    return ESP_OK;
+  }
+
+  i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+  i2c_master_start(cmd);
+  i2c_master_write_byte(cmd, deviceAddress << 1 | WRITE_BIT, ACK_CHECK_EN);
+  i2c_master_write_byte(cmd, data[0], ACK_CHECK_EN);
+  i2c_master_stop(cmd);
+  int ret = i2c_master_cmd_begin(0 /* i2c_num */, cmd, 1000 / portTICK_RATE_MS);
+  i2c_cmd_link_delete(cmd);
+  if (ret != ESP_OK) {
+    return ret;
+  }
+  vTaskDelay(1 / portTICK_RATE_MS);
   cmd = i2c_cmd_link_create();
   i2c_master_start(cmd);
   i2c_master_write_byte(cmd, deviceAddress << 1 | READ_BIT, ACK_CHECK_EN);
@@ -93,7 +120,7 @@ bool readBit(uint8_t deviceAddress, uint8_t registerAddress, uint8_t bitPosition
 
 bool writeBit(uint8_t deviceAddress, uint8_t registerAddress, uint8_t bitPosition, uint8_t flag) {
   uint8_t request[2] = {registerAddress, 0u};
-  if (i2c_read(deviceAddress, request, 1u) != 0u) {
+  if (i2c_read_robust(deviceAddress, request, 1u) != 0u) {
     return false;
   }
 
@@ -149,7 +176,7 @@ bool readBits(uint8_t deviceAddress, uint8_t registerAddress, uint8_t bitPositio
 
 bool writeBits(uint8_t deviceAddress, uint8_t registerAddress, uint8_t bitPosition, uint8_t length, uint8_t data) {
   uint8_t request[2] = {registerAddress, 0u};
-  if (i2c_read(deviceAddress, request, 1u) != 0u) {
+  if (i2c_read_robust(deviceAddress, request, 1u) != 0u) {
     return false;
   }
 
