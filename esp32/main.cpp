@@ -42,7 +42,68 @@ Servo2* servoY = nullptr;
 
 SemaphoreHandle_t print_mux = NULL;
 
+auto isFreeFall = false;
+auto isParachuteOpen = false;
+
+void fireParachute() {
+  constexpr TickType_t timeout = 3000u; // 3000ms = 3sec
+  static TickType_t timer = portMAX_DELAY;
+
+  if(isFreeFall == false || isParachuteOpen) {
+	  return;
+  }
+
+  if(isFreeFall && timer == portMAX_DELAY) {
+    timer = xTaskGetTickCount() / pdMS_TO_TICKS(1u);
+  }
+
+  if((timer + timeout) < (xTaskGetTickCount() / pdMS_TO_TICKS(1u))) {
+	printf("Fire parachute!\n");
+	gpio_set_level(GPIO_NUM_15, 1);
+	isParachuteOpen = true;
+  }
+}
+
+void detectFreeFall() {
+  constexpr TickType_t timeout = 300u; // 300ms
+  static TickType_t timer = portMAX_DELAY;
+  static auto positiveCounter = 0u;
+  static auto negativeCounter = 0u;
+
+  if(isFreeFall) {
+	  fireParachute();
+	  return;
+  }
+
+  if((std::abs(AccX) < 200u) && (std::abs(AccY) < 200u) && (std::abs(AccZ) < 200u)) {
+	if(timer == portMAX_DELAY) {
+		timer = xTaskGetTickCount() / pdMS_TO_TICKS(1u);
+	}
+	positiveCounter++;
+  } else {
+	negativeCounter++;
+  }
+
+  if(timer != portMAX_DELAY) {
+    if((timer + timeout) < (xTaskGetTickCount() / pdMS_TO_TICKS(1u))) {
+    double trustFactor = (double) positiveCounter / (positiveCounter + negativeCounter);
+	  printf("trustFactor: %f\n", trustFactor);
+	  if(trustFactor > 0.8) {
+		isFreeFall = true;
+		printf("Detected freeFall! %d / %d\n", positiveCounter, negativeCounter);
+	  } else {
+        positiveCounter = 0u;
+	    negativeCounter = 1u;
+	  }
+	  timer = portMAX_DELAY;
+    }
+  }
+}
+
 static void main_task(void* arg) {
+
+  gpio_reset_pin(GPIO_NUM_15);
+  gpio_set_direction(GPIO_NUM_15, GPIO_MODE_OUTPUT);
 
   static MPU6050 _mpu6050{MPU6050_DEFAULT_ADDRESS};
   mpu6050 = &_mpu6050;
@@ -67,8 +128,10 @@ static void main_task(void* arg) {
     int accX = AccX;
     int accY = AccY;
     int accZ = AccZ;
-    printf("%d,%d,%d\n", accX, accY, accZ);
+    //printf("%d,%d,%d\n", accX, accY, accZ);
     //vTaskDelay(CONTROL_RATE / portTICK_RATE_MS);
+
+    detectFreeFall();
   }
   vTaskDelete(NULL);
 }
@@ -156,7 +219,7 @@ void updateServoPos() {
   servoXAngleInt -= ServoXOffset;
   servoYAngleInt -= ServoYOffset;
 
-  printf("servoXAngleInt: %d servoYAngleInt: %d\n", servoXAngleInt, servoYAngleInt);
+  //printf("servoXAngleInt: %d servoYAngleInt: %d\n", servoXAngleInt, servoYAngleInt);
 }
 
 void rotateXAxis(double vec[3], double alpha) {
