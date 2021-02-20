@@ -18,7 +18,7 @@
 // configurable values
 #define CONTROL_RATE 50
 
-double Kp = 2.2;
+double Kp = -2.2;
 double ServoXOffset = 15.0;
 double ServoYOffset = 16.0;
 
@@ -173,8 +173,11 @@ void accel_degrees() {
 }
 
 void callPidController() {
-  ServoXDeg = (90 + Kp * Pitch + ServoXOffset) * 0.05 + ServoXDeg * 0.95;
-  ServoYDeg = (90 + Kp * Yaw + ServoYOffset) * 0.05 + ServoYDeg * 0.95;
+  auto gainY = 1.0f;
+  auto gainX = 1.2f;
+
+  ServoXDeg = (90 + Kp * Pitch * gainX + ServoXOffset) * 0.05 + ServoXDeg * 0.95;
+  ServoYDeg = (90 + Kp * Yaw * gainY + ServoYOffset) * 0.05 + ServoYDeg * 0.95;
 }
 
 void updateServoPos() {
