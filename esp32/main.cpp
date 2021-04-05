@@ -18,13 +18,13 @@
 // configurable values
 #define CONTROL_RATE 50
 
-double ServoXOffset = -20.0;
-double ServoYOffset = -30.0;
+double ServoXOffset = 40.0;
+double ServoYOffset = 40.0;
 
-double ServoXMinAngle = 40.0;
-double ServoXMaxAngle = 165.0;
-double ServoYMinAngle = 70.0;
-double ServoYMaxAngle = 170.0;
+double ServoXMinAngle = 0.0;
+double ServoXMaxAngle = 120.0;
+double ServoYMinAngle = 0.0;
+double ServoYMaxAngle = 90.0;
 
 #include "main.h"
 
@@ -172,18 +172,22 @@ void accel_degrees() {
 }
 
 void callPidController() {
-  constexpr auto gainY = 1.4f;
-  constexpr auto gainX = 1.4f;
+  constexpr auto gainY = 1.1f;
+  constexpr auto gainX = 1.12f;
   constexpr auto averageDerivate = 0.15;
   constexpr auto average = 0.15;
 
-  auto derivateX = (90 + Pitch + ServoXOffset) * averageDerivate - (ServoXDeg/gainX) * (1.0f - averageDerivate);
-  auto derivateY = (90 + Yaw + ServoYOffset) * averageDerivate - (ServoYDeg/gainY)* (1.0f - averageDerivate);
+  auto derivateX = (90 + Pitch + ServoXOffset) * averageDerivate - (ServoXDeg) * (1.0f - averageDerivate);
+  auto derivateY = (90 + Yaw + ServoYOffset) * averageDerivate - (ServoYDeg)* (1.0f - averageDerivate);
 
-  ServoXDeg = (90 + Pitch + ServoXOffset) * average + (ServoXDeg/gainX) * (1.0f-average) + derivateX * 0.1;
+  ServoXDeg = (90 + Pitch + ServoXOffset) * average + ServoXDeg * (1.0f-average) + derivateX * 0.1;
+  ServoXDeg -= 90;
   ServoXDeg *= gainX;
-  ServoYDeg = (90 + Yaw + ServoYOffset) * average + (ServoYDeg/gainY) * (1.0f-average) + derivateY * 0.1;
+  ServoXDeg += 90;
+  ServoYDeg = (90 + Yaw + ServoYOffset) * average + ServoYDeg * (1.0f-average) + derivateY * 0.1;
+  ServoYDeg -= 90;
   ServoYDeg *= gainY;
+  ServoYDeg += 90;
 }
 
 void updateServoPos() {
