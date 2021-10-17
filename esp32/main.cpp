@@ -186,10 +186,10 @@ void callPidController() {
   auto derivateY = OldYaw * (1.0 - derivateAverage) + (OldYaw - Yaw) * derivateAverage;
 
   ServoXDeg = averageX * controlWeight + derivateX * derivateWeight;
-  OldPitch = ServoXDeg;
+  Pitch = ServoXDeg;
   ServoXDeg *= gainX;
   ServoYDeg = averageY * controlWeight + derivateY * derivateWeight;
-  OldYaw = ServoYDeg;
+  Yaw = ServoYDeg;
   ServoYDeg *= gainY;
 
   //printf("ServoXDeg: %f ServoYDeg: %f\n", ServoXDeg, ServoYDeg);
