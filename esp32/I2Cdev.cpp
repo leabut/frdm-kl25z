@@ -95,7 +95,7 @@ esp_err_t i2c_write(uint8_t deviceAddress, uint8_t* data, size_t size) {
 
 esp_err_t i2c_init(void) {
   int i2c_master_port = I2C_MASTER_NUM;
-  i2c_config_t conf;
+  i2c_config_t conf{};
   conf.mode = I2C_MODE_MASTER;
   conf.sda_io_num = I2C_MASTER_SDA_IO;
   conf.sda_pullup_en = GPIO_PULLUP_ENABLE;

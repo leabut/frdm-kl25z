@@ -16,22 +16,22 @@
 #include <Servo2.h>
 
 // configurable values
-#define CONTROL_RATE 50
+#define CONTROL_RATE 20 // in ms
 
-double ServoXOffset = 40.0;
-double ServoYOffset = 40.0;
+constexpr double ServoXOffset = 0.0;
+constexpr double ServoYOffset = 0.0;
 
-double ServoXMinAngle = 0.0;
-double ServoXMaxAngle = 120.0;
-double ServoYMinAngle = 0.0;
-double ServoYMaxAngle = 90.0;
+constexpr double ServoXMinAngle = 45.0;
+constexpr double ServoXMaxAngle = 150.0;
+constexpr double ServoYMinAngle = 45.0;
+constexpr double ServoYMaxAngle = 130.0;
 
 #include "main.h"
 
 #define RAD_TO_DEG (360.0f / (2 * 3.141f))
 
 float AccX = 0.0f, AccY = 0.0f, AccZ = 0.0f;
-double Pitch = 0.0, Yaw = 0.0;
+double Pitch = 0.0, Yaw = 0.0, OldPitch = 0.0, OldYaw = 0.0;
 double ServoXDeg = 90.0, ServoYDeg = 90.0;
 double AngleXZAxis = 0.0, AngleYZAxis = 0.0;
 
@@ -53,10 +53,10 @@ void fireParachute() {
   }
 
   if(isFreeFall && timer == portMAX_DELAY) {
-    timer = xTaskGetTickCount() / pdMS_TO_TICKS(1u);
+    timer = pdTICKS_TO_MS(xTaskGetTickCount());
   }
 
-  if((timer + timeout) < (xTaskGetTickCount() / pdMS_TO_TICKS(1u))) {
+  if((timer + timeout) < (pdTICKS_TO_MS(xTaskGetTickCount()))) {
 	printf("Fire parachute!\n");
 	gpio_set_level(GPIO_NUM_15, 1);
 	isParachuteOpen = true;
@@ -76,7 +76,7 @@ void detectFreeFall() {
 
   if((std::abs(AccX) < 200u) && (std::abs(AccY) < 200u) && (std::abs(AccZ) < 200u)) {
 	if(timer == portMAX_DELAY) {
-		timer = xTaskGetTickCount() / pdMS_TO_TICKS(1u);
+		timer = pdTICKS_TO_MS(xTaskGetTickCount());
 	}
 	positiveCounter++;
   } else {
@@ -84,7 +84,7 @@ void detectFreeFall() {
   }
 
   if(timer != portMAX_DELAY) {
-    if((timer + timeout) < (xTaskGetTickCount() / pdMS_TO_TICKS(1u))) {
+    if((timer + timeout) < (pdTICKS_TO_MS(xTaskGetTickCount()))) {
     double trustFactor = (double) positiveCounter / (positiveCounter + negativeCounter);
 	  printf("trustFactor: %f\n", trustFactor);
 	  if(trustFactor > 0.8) {
@@ -124,11 +124,7 @@ static void main_task(void* arg) {
     callPidController();
     updateServoPos();
 
-    int accX = AccX;
-    int accY = AccY;
-    int accZ = AccZ;
-    //printf("%d,%d,%d\n", accX, accY, accZ);
-    //vTaskDelay(CONTROL_RATE / portTICK_RATE_MS);
+    vTaskDelay(pdMS_TO_TICKS(CONTROL_RATE));
 
     detectFreeFall();
   }
@@ -166,33 +162,40 @@ void getAccData() {
 }
 
 void accel_degrees() {
+  OldPitch = Pitch;
+  OldYaw = Yaw;
   Yaw = atan(AccY / sqrt(AccX * AccX + AccZ * AccZ)) * RAD_TO_DEG;
   Pitch = atan(-AccX / sqrt(AccY * AccY + AccZ * AccZ)) * RAD_TO_DEG;
   Yaw *= -1;
+
+  //printf("Yaw: %f Pitch: %f\n", Yaw, Pitch);
 }
 
 void callPidController() {
-  constexpr auto gainY = 1.1f;
-  constexpr auto gainX = 1.12f;
-  constexpr auto averageDerivate = 0.15;
-  constexpr auto average = 0.15;
+  constexpr auto gainY = 0.2f;
+  constexpr auto gainX = 0.2f;
+  constexpr auto controlAverage = 0.15;
+  constexpr auto derivateAverage = 0.15;
+  constexpr auto controlWeight = 0.90;
+  constexpr auto derivateWeight = 1.0 - controlWeight;
 
-  auto derivateX = (90 + Pitch + ServoXOffset) * averageDerivate - (ServoXDeg) * (1.0f - averageDerivate);
-  auto derivateY = (90 + Yaw + ServoYOffset) * averageDerivate - (ServoYDeg)* (1.0f - averageDerivate);
+  auto averageX = OldPitch * (1.0 - controlAverage) + Pitch * controlAverage;
+  auto averageY = OldYaw * (1.0 - controlAverage) + Yaw * controlAverage;
 
-  ServoXDeg = (90 + Pitch + ServoXOffset) * average + ServoXDeg * (1.0f-average) + derivateX * 0.1;
-  ServoXDeg -= 90;
+  auto derivateX = OldPitch * (1.0 - derivateAverage) + (OldPitch - Pitch) * derivateAverage;
+  auto derivateY = OldYaw * (1.0 - derivateAverage) + (OldYaw - Yaw) * derivateAverage;
+
+  ServoXDeg = averageX * controlWeight + derivateX * derivateWeight;
   ServoXDeg *= gainX;
-  ServoXDeg += 90;
-  ServoYDeg = (90 + Yaw + ServoYOffset) * average + ServoYDeg * (1.0f-average) + derivateY * 0.1;
-  ServoYDeg -= 90;
+  ServoYDeg = averageY * controlWeight + derivateY * derivateWeight;
   ServoYDeg *= gainY;
-  ServoYDeg += 90;
+
+  //printf("ServoXDeg: %f ServoYDeg: %f\n", ServoXDeg, ServoYDeg);
 }
 
 void updateServoPos() {
-  uint32_t servoXAngleInt = ServoXDeg;
-  uint32_t servoYAngleInt = ServoYDeg;
+  uint32_t servoXAngleInt = abs(90 + ServoXDeg + ServoXOffset); // range 0 - 180
+  uint32_t servoYAngleInt = abs(90 + ServoYDeg + ServoYOffset); // range 0 - 180
 
   auto upperLimitX = ServoXMaxAngle + ServoXOffset;
   auto lowerLimitX = ServoXMinAngle + ServoXOffset;
@@ -212,25 +215,22 @@ void updateServoPos() {
 	  lowerLimitY = 0.0;
   }
 
-  if (ServoXDeg >= upperLimitX) {
+  if (servoXAngleInt >= upperLimitX) {
     servoXAngleInt = upperLimitX;
   }
-  if (ServoXDeg <= lowerLimitX) {
+  if (servoXAngleInt <= lowerLimitX) {
     servoXAngleInt = lowerLimitX;
   }
 
-  if (ServoYDeg >= upperLimitY) {
+  if (servoYAngleInt >= upperLimitY) {
     servoYAngleInt = upperLimitY;
   }
-  if (ServoYDeg <= lowerLimitY) {
+  if (servoYAngleInt <= lowerLimitY) {
     servoYAngleInt = lowerLimitY;
   }
 
   servoX->setAngle(servoXAngleInt);
   servoY->setAngle(servoYAngleInt);
-
-  servoXAngleInt -= ServoXOffset;
-  servoYAngleInt -= ServoYOffset;
 
   //printf("servoXAngleInt: %d servoYAngleInt: %d\n", servoXAngleInt, servoYAngleInt);
 }
