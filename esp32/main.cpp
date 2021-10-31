@@ -162,8 +162,6 @@ void getAccData() {
 }
 
 void accel_degrees() {
-  OldPitch = Pitch;
-  OldYaw = Yaw;
   Yaw = atan(AccY / sqrt(AccX * AccX + AccZ * AccZ)) * RAD_TO_DEG;
   Pitch = atan(-AccX / sqrt(AccY * AccY + AccZ * AccZ)) * RAD_TO_DEG;
   Yaw *= -1;
@@ -172,11 +170,11 @@ void accel_degrees() {
 }
 
 void callPidController() {
-  constexpr auto gainY = 0.2f;
-  constexpr auto gainX = 0.2f;
-  constexpr auto controlAverage = 0.15;
-  constexpr auto derivateAverage = 0.15;
-  constexpr auto controlWeight = 0.90;
+  constexpr auto gainY = 0.7f;
+  constexpr auto gainX = 1.1f;
+  constexpr auto controlAverage = 0.50;
+  constexpr auto derivateAverage = 0.80;
+  constexpr auto controlWeight = 0.70;
   constexpr auto derivateWeight = 1.0 - controlWeight;
 
   auto averageX = OldPitch * (1.0 - controlAverage) + Pitch * controlAverage;
@@ -191,6 +189,9 @@ void callPidController() {
   ServoYDeg = averageY * controlWeight + derivateY * derivateWeight;
   Yaw = ServoYDeg;
   ServoYDeg *= gainY;
+
+  OldPitch = averageX;
+  OldYaw = averageY;
 
   //printf("ServoXDeg: %f ServoYDeg: %f\n", ServoXDeg, ServoYDeg);
 }
